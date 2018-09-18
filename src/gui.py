@@ -51,7 +51,7 @@ class mainWindow:
 		self.minFrequencyLabel.grid(row = 0, column = 0, sticky = tkinter.E+ tkinter.W)
 
 		self.minFrequencyString = tkinter.StringVar(self.top)
-		self.minFrequencyString.set("255000")
+		self.minFrequencyString.set("241000")
 		self.minFrequencyString.trace("w",lambda name,index, callback: self.plotWindow(self.scanNumber))
 
 		self.minFrequencyEntry = tkinter.Entry(self.frequencyInputFrame, textvariable = self.minFrequencyString)
@@ -60,7 +60,7 @@ class mainWindow:
 		self.maxFrequencyLabel.grid(row = 0, column = 1, sticky = tkinter.E+ tkinter.W)
 
 		self.maxFrequencyString = tkinter.StringVar(self.top)
-		self.maxFrequencyString.set("260000")
+		self.maxFrequencyString.set("245000")
 		self.maxFrequencyString.trace("w",lambda name,index, callback: self.plotWindow(self.scanNumber))
 		self.maxFrequencyEntry = tkinter.Entry(self.frequencyInputFrame, textvariable = self.maxFrequencyString)
 		self.maxFrequencyEntry.grid(row = 1, column = 1, sticky = tkinter.E+tkinter.W+tkinter.N)
@@ -150,14 +150,20 @@ class mainWindow:
 	def saveParameters(self):
 		noExtensionPath = os.path.splitext(self.guiData.fullPath)
 		parameterFile = open(str(noExtensionPath[0]) + 'FitParameters.dat', 'w+')
-		if self.guiData.summedFitParameters.any:
+		if np.any(self.guiData.summedFitParameters):
 			parameterFile.write(str(self.guiData.summedFitParameters))
 			parameterFile.write(str('\n'))
 		else:
 			for column in range(0, self.guiData.fitParameters.shape[1]):
+				parameterFile.write('\t'.join("") + '\n')
 				parameterFile.write("0\t")
 			parameterFile.write(str('\n'))
 		if self.guiData.fitParameters.any:
+			for row in range(0,self.guiData.fitParameters.shape[0]):
+				for column in range (0,self.guiData.fitParameters.shape[1]):
+					parameterFile.write(str(self.guiData.fitParameters[row][column]) + "\t")
+				parameterFile.write(str('\n'))
+		else:
 			for row in range(0,self.guiData.fitParameters.shape[0]):
 				for column in range (0,self.guiData.fitParameters.shape[1]):
 					parameterFile.write(str(self.guiData.fitParameters[row][column]) + "\t")
@@ -192,15 +198,15 @@ class mainWindow:
 			self.guiData.phase[scanNumber] = float(self.phaseStringVar.get())
 			self.plotWindow(self.scanNumber)
 	def fitGuiData(self):
-		frequency = self.frequencyParameter.get() if self.frequencyParameter.get() else (int(self.maxFrequencyEntry.get())+int(self.minFrequencyEntry.get()))/2
-		width = self.widthParameter.get() if self.widthParameter.get() else (int(self.maxFrequencyEntry.get())+int(self.minFrequencyEntry.get()))/100
+		frequency = float(self.frequencyParameter.get()) if self.frequencyParameter.get() else (int(self.maxFrequencyEntry.get())+int(self.minFrequencyEntry.get()))/2
+		width = float(self.widthParameter.get()) if self.widthParameter.get() else (int(self.maxFrequencyEntry.get())-int(self.minFrequencyEntry.get()))/100
 		#height = self.heightParameter.get() if self.heightParameter.get() else np.max(self.guiData.fftData[self.scanNumber])
 		if self.heightParameter.get():
-			height = self.heightParameter.get() 
+			height = float(self.heightParameter.get())
 		elif self.guiData.summedFftData.any():
-			height = np.real(np.max(self.guiData.summedFftData))
+			height = np.real(np.max(self.guiData.summedFftData[self.guiData.getIndex(int(self.minFrequencyEntry.get())):self.guiData.getIndex(int(self.maxFrequencyEntry.get()))]))
 		elif self.guiData.fftData.any():
-			height = np.real(np.max(self.guiData.fftData[self.scanNumber]))
+			height = np.real(np.max(self.guiData.fftData[self.scanNumber, self.guiData.getIndex(int(self.minFrequencyEntry.get())):self.guiData.getIndex(int(self.maxFrequencyEntry.get()))]))
 		else:
 			height = 1;
 		if self.sumDataVar.get():
@@ -208,8 +214,12 @@ class mainWindow:
 		else:
 			self.guiData.fitParameters[self.scanNumber] = [height, frequency, width]
 		self.fitFunction, tempParameters = self.guiData.fit(int(self.minFrequencyEntry.get()), int(self.maxFrequencyEntry.get()), self.scanNumber, 0, self.sumDataVar.get())
+		print("tempParameters: ")
 		print(tempParameters)
-		#self.guiData.fitParameters[self.scanNumber] = tempParameters[0]
+		if self.sumDataVar.get():
+			self.guiData.summedFitParameters = tempParameters[0]
+		else:
+			self.guiData.fitParameters[self.scanNumber] = tempParameters[0]
 		self.frequencyParameter.delete(0,tkinter.END)
 		self.widthParameter.delete(0,tkinter.END)
 		self.heightParameter.delete(0,tkinter.END)
@@ -237,10 +247,10 @@ class mainWindow:
 				#pdb.set_trace()
 				#self.subplot.plot(self.guiData.frequencies[lowerIndex:upperIndex], np.real(cmath.exp(1j*self.guiData.phase[0])*  np.sum(self.guiData.fftData[:, -self.guiData.frequencies.size+lowerIndex:-self.guiData.frequencies.size+upperIndex])))
 				#self.subplot.plot(self.guiData.timePoints[lowerIndex:upperIndex] , np.real( self.guiData.data[0, lowerIndex:upperIndex ]))
+				print(self.guiData.summedFitParameters)
 				if np.any(self.guiData.summedFitParameters):
-					yData = self.fitFunction(self.guiData.frequencies[lowerIndex:upperIndex], *self.guiData.summedFitParameters)
+					yData = np.real(cmath.exp(1j*self.guiData.phase[0]) * self.fitFunction(self.guiData.frequencies[lowerIndex:upperIndex], *self.guiData.summedFitParameters))
 					self.subplot.plot(self.guiData.frequencies[lowerIndex:upperIndex], yData)
-				
 			else:
 				if self.guiData.fitParameters[self.scanNumber].any():
 					print("params:", self.guiData.fitParameters)
@@ -249,7 +259,7 @@ class mainWindow:
 					self.frequencyParameter.insert(0,self.guiData.fitParameters[self.scanNumber][1])
 				self.subplot.plot(self.guiData.frequencies[lowerIndex:upperIndex], np.real(cmath.exp(1j*self.guiData.phase[scanNumber]) * self.guiData.fftData[scanNumber, -self.guiData.frequencies.size+lowerIndex:-self.guiData.frequencies.size+upperIndex]))
 				if np.any(self.guiData.fitParameters[scanNumber]):
-					yData = self.fitFunction(self.guiData.frequencies[lowerIndex:upperIndex], *self.guiData.fitParameters[scanNumber])
+					yData = np.real(cmath.exp(1j*self.guiData.phase[0]) * self.fitFunction(self.guiData.frequencies[lowerIndex:upperIndex], *self.guiData.fitParameters[scanNumber]))
 					self.subplot.plot(self.guiData.frequencies[lowerIndex:upperIndex], yData)
 			self.plotCanvas.draw()
 		except AttributeError:

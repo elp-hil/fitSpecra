@@ -52,7 +52,6 @@ class data:
 	def fft(self, omitSamples, sumScans = 0, zeroFill = 0):
 		nextPowerOfTwo = int(math.pow(2,math.ceil(math.log((self.samples-omitSamples))/math.log(2.0))))
 		self.frequencies = np.linspace(0, self.samplingRate/2, nextPowerOfTwo*(zeroFill +1)/2)#(self.samples-omitSamples)/2)
-		print (self.samplingRate/2)
 		#np.pad(self.frequencies, (0,int(nextPowerOfTwo - (self.samples - omitSamples)/2) + zeroFill * int( (self.samples-omitSamples) /2)), 'constant', constant_values = 0)
 		if sumScans:
 			self.summedFftData = np.array([])
@@ -61,7 +60,6 @@ class data:
 			tmpData = np.pad(self.summedData[omitSamples:], (0,nextPowerOfTwo - (self.samples - omitSamples) + zeroFill * nextPowerOfTwo), 'constant', constant_values = 0)
 			self.summedFftData =  np.fft.fftshift(np.fft.fft(tmpData))
 		else:
-			print(nextPowerOfTwo , zeroFill)
 			self.fftData = np.empty([0, int(nextPowerOfTwo *
 			    (zeroFill+1))], dtype=float)
 			self.phase[0] = -cmath.pi/8
@@ -70,8 +68,6 @@ class data:
 				self.fftData = np.vstack([self.fftData, np.fft.fftshift(np.fft.fft(tmpData))])
 		self.fitParameters = np.zeros((self.fftData.shape[0], 3))
 		self.summedFitParameters = np.zeros((1,3))
-		print(self.summedFitParameters)
-		print(self.fftData.shape[0], 3)
 	def getIndex(self, frequency):
 		index = 0
 		while self.frequencies[index] < frequency:
@@ -108,13 +104,6 @@ class data:
 		if summed == 0:
 			return func, curve_fit(func,
 				self.frequencies[startIndex:stopIndex],
-				np.real(cmath.exp(1j*self.phase[scanNumber]) *
-				    self.fftData[scanNumber,
-					-self.frequencies.size+startIndex:-self.frequencies.size+stopIndex]),
-				    self.fitParameters[scanNumber], maxfev =
-				    2000, bounds=parameterBounds)
+				np.real(cmath.exp(1j*self.phase[scanNumber]) * self.fftData[scanNumber,	-self.frequencies.size+startIndex:-self.frequencies.size+stopIndex]), self.fitParameters[scanNumber], maxfev = 2000, bounds=parameterBounds)
 		elif summed == 1:
-			print(self.summedFitParameters)
-			return	func, curve_fit(func, self.frequencies[startIndex:stopIndex], np.real(cmath.exp(1j*self.phase[scanNumber]) * self.summedFftData[	-self.frequencies.size+startIndex:-self.frequencies.size+stopIndex]),
-				    self.summedFitParameters, maxfev =
-				    2000, bounds=parameterBounds)
+			return	func, curve_fit(func, self.frequencies[startIndex:stopIndex], np.real(cmath.exp(1j*self.phase[scanNumber]) * self.summedFftData[	-self.frequencies.size+startIndex:-self.frequencies.size+stopIndex]), self.summedFitParameters, maxfev = 2000, bounds=parameterBounds)
