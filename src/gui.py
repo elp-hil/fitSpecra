@@ -7,8 +7,9 @@ from tkinter import filedialog
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
 from matplotlib.figure import Figure
 import numpy as np
+import pdb
 #dataText = '/media/group/hyper/archive/Measured_Data/2016_06_21/20160621_081835.mat'
-dataText = '/media/group/hyper/archive/Measured_Data/2013_11_08/20131108_101733.mat'
+dataText = '/media/group/hyper/archive/Measured_Data/2018_09_17/125700.mat'
 matplotlib.use("TkAgg")
 class mainWindow:
 	def __init__(self):
@@ -139,6 +140,7 @@ class mainWindow:
 		if os.path.exists(parameterFilePath) and os.path.getsize(parameterFilePath)>0:
 			with open(parameterFilePath) as fullFile:
 				lineNumber = 0
+				fullFile.readline().strip().split("\t")
 				for line in fullFile:
 					self.guiData.fitParameters[lineNumber] =line.strip().split("\t")
 					print(line)
@@ -147,13 +149,19 @@ class mainWindow:
 
 	def saveParameters(self):
 		noExtensionPath = os.path.splitext(self.guiData.fullPath)
+		parameterFile = open(str(noExtensionPath[0]) + 'FitParameters.dat', 'w+')
+		if self.guiData.summedFitParameters.any:
+			parameterFile.write(str(self.guiData.summedFitParameters))
+			parameterFile.write(str('\n'))
+		else:
+			for column in range(0, self.guiData.fitParameters.shape[1]):
+				parameterFile.write("0\t")
+			parameterFile.write(str('\n'))
 		if self.guiData.fitParameters.any:
-			parameterFile = open(str(noExtensionPath[0]) + 'FitParameters.dat', 'w+')
 			for row in range(0,self.guiData.fitParameters.shape[0]):
 				for column in range (0,self.guiData.fitParameters.shape[1]):
 					parameterFile.write(str(self.guiData.fitParameters[row][column]) + "\t")
-					parameterFile.write(str('\n'))
-
+				parameterFile.write(str('\n'))
 	def fftGuiData(self):
 		print("zerofilling: ", self.zeroFillStringVar.get())
 		print(self.sumDataVar.get())
@@ -177,17 +185,31 @@ class mainWindow:
 	def fitFunction(self, data, *parameters):
 		return np.zeros(data.shape[0]) #real fit function is returned by guiData.fit
 	def setPhase(self, scanNumber):
-		self.guiData.phase[scanNumber] = float(self.phaseStringVar.get())
-		self.plotWindow(self.scanNumber)
+		if self.sumDataVar.get():
+			self.guiData.phase[0] = float(self.phaseStringVar.get())
+			self.plotWindow(self.scanNumber)
+		else:
+			self.guiData.phase[scanNumber] = float(self.phaseStringVar.get())
+			self.plotWindow(self.scanNumber)
 	def fitGuiData(self):
-		print("width parameter", 1 if self.widthParameter.get() else 0)
 		frequency = self.frequencyParameter.get() if self.frequencyParameter.get() else (int(self.maxFrequencyEntry.get())+int(self.minFrequencyEntry.get()))/2
 		width = self.widthParameter.get() if self.widthParameter.get() else (int(self.maxFrequencyEntry.get())+int(self.minFrequencyEntry.get()))/100
-		height = self.heightParameter.get() if self.heightParameter.get() else np.max(self.guiData.fftData[self.scanNumber])
-		self.guiData.fitParameters[self.scanNumber] = [height, frequency, width]
+		#height = self.heightParameter.get() if self.heightParameter.get() else np.max(self.guiData.fftData[self.scanNumber])
+		if self.heightParameter.get():
+			height = self.heightParameter.get() 
+		elif self.guiData.summedFftData.any():
+			height = np.real(np.max(self.guiData.summedFftData))
+		elif self.guiData.fftData.any():
+			height = np.real(np.max(self.guiData.fftData[self.scanNumber]))
+		else:
+			height = 1;
+		if self.sumDataVar.get():
+			self.guiData.summedFitParameters = [height, frequency, width]
+		else:
+			self.guiData.fitParameters[self.scanNumber] = [height, frequency, width]
 		self.fitFunction, tempParameters = self.guiData.fit(int(self.minFrequencyEntry.get()), int(self.maxFrequencyEntry.get()), self.scanNumber, 0, self.sumDataVar.get())
-		print(self.guiData.fitParameters[self.scanNumber][0])
-		self.guiData.fitParameters[self.scanNumber] = tempParameters[0]
+		print(tempParameters)
+		#self.guiData.fitParameters[self.scanNumber] = tempParameters[0]
 		self.frequencyParameter.delete(0,tkinter.END)
 		self.widthParameter.delete(0,tkinter.END)
 		self.heightParameter.delete(0,tkinter.END)
@@ -209,9 +231,16 @@ class mainWindow:
 				lowerIndex = self.guiData.getIndex(int(self.minFrequencyEntry.get()))
 				upperIndex = self.guiData.getIndex(int(self.maxFrequencyEntry.get()))
 				print("lower: ", lowerIndex, "upper: ", upperIndex, "sumData: ", self.sumDataVar.get())
-			if self.sumDataVar.get() == 1:
+			if self.sumDataVar.get():
 				print("size summed fft: ", self.guiData.summedFftData.size)
-				self.subplot.plot(self.guiData.frequencies[lowerIndex:upperIndex], self.guiData.summedFftData[-self.guiData.frequencies.size+lowerIndex:-self.guiData.frequencies.size+upperIndex])
+				self.subplot.plot(self.guiData.frequencies[lowerIndex:upperIndex], np.real(cmath.exp(1j*self.guiData.phase[0])*  self.guiData.summedFftData[-self.guiData.frequencies.size+lowerIndex:-self.guiData.frequencies.size+upperIndex]))
+				#pdb.set_trace()
+				#self.subplot.plot(self.guiData.frequencies[lowerIndex:upperIndex], np.real(cmath.exp(1j*self.guiData.phase[0])*  np.sum(self.guiData.fftData[:, -self.guiData.frequencies.size+lowerIndex:-self.guiData.frequencies.size+upperIndex])))
+				#self.subplot.plot(self.guiData.timePoints[lowerIndex:upperIndex] , np.real( self.guiData.data[0, lowerIndex:upperIndex ]))
+				if np.any(self.guiData.summedFitParameters):
+					yData = self.fitFunction(self.guiData.frequencies[lowerIndex:upperIndex], *self.guiData.summedFitParameters)
+					self.subplot.plot(self.guiData.frequencies[lowerIndex:upperIndex], yData)
+				
 			else:
 				if self.guiData.fitParameters[self.scanNumber].any():
 					print("params:", self.guiData.fitParameters)
@@ -221,14 +250,12 @@ class mainWindow:
 				self.subplot.plot(self.guiData.frequencies[lowerIndex:upperIndex], np.real(cmath.exp(1j*self.guiData.phase[scanNumber]) * self.guiData.fftData[scanNumber, -self.guiData.frequencies.size+lowerIndex:-self.guiData.frequencies.size+upperIndex]))
 				if np.any(self.guiData.fitParameters[scanNumber]):
 					yData = self.fitFunction(self.guiData.frequencies[lowerIndex:upperIndex], *self.guiData.fitParameters[scanNumber])
-				#print("fitParameters: ", self.guiData.fitParameters[scanNumber])
-				#print("ydata: ", yData)
 					self.subplot.plot(self.guiData.frequencies[lowerIndex:upperIndex], yData)
 			self.plotCanvas.draw()
-		#except AttributeError:
-		#	print("Please load a dataset")
-		#except IndexError:
-		#	print("Please check parameters")
+		except AttributeError:
+			print("Please load a dataset")
+		except IndexError:
+			print("Please check parameters")
 		except ValueError:
 			print("wrong parameters entered")
 		#self.minFrequencyEntry.focus_set()

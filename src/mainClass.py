@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import dataStruct
 import gui
+import pdb
 window = gui.mainWindow()
 nomitSamples = 2000
 #currentData = dataStruct.data('/media/group/hyper/archive/Measured_Data/2016_06_21/20160621_081835.mat')
