@@ -99,7 +99,10 @@ class data:
 			#def func(x, width, height, center):
 			#	return height / (np.pi * (x - center)**2/width + (width))
 			def func(x, *parameters):
-				return parameters[0] / (np.pi * (x - parameters[1])**2/parameters[2] + (parameters[2]))
+			        #parameters[0] is width
+			        #parameters[1] is frequency
+			        #parameters[0] is width
+				return parameters[0] / (np.pi * ((x - parameters[1])**2/parameters[2] + (parameters[2])))
 		elif function == 1:
 			def func(x, a, b, c):
 				return a * np.exp(-b * x) + c
@@ -118,7 +121,6 @@ class data:
 			with open(parameterFilePath) as fullFile:
 				lineNumber = 0
 				readList  = list((float(number) for number in fullFile.readline().strip().split()))
-				pdb.set_trace()
 				self.summedFitParameters = readList[0:len(readList) - 1]
 				self.summedPhase = readList[len(readList) - 1]
 				print(self.summedFitParameters)
