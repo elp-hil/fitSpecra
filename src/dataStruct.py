@@ -23,7 +23,10 @@ class data:
 		self.fitParameters = np.array([])
 		self.summedFitParameters = np.array([])
 		self.phase = np.array([]) #-2*cmath.pi
-		self.phaseSummed = 0
+		self.summedPhase = 0
+		self.function = 0
+		self.numberOfParameters = np.array((3,3))
+		self.nScans = 0
 	def setType(self, dataType):
 		self.overrideType = dataType
 	def read(self):
@@ -42,15 +45,18 @@ class data:
 			tempData = matFile.read(self.fullPath)
 			self.timePoints = tempData[0,:]
 			self.data = tempData[1:tempData[:,0].size]
-			self.samples, self.samplingRate = matFile.readParameters(filename+'parameter.mat')
+			self.samples, self.samplingRate, self.nScans = matFile.readParameters(filename+'parameter.mat')
 		elif dataType == 2:
 			self.data = datFile(self.fullPath)
 		else:
 			print("Please choose valid override parameter:\n 1: .mat file\n 2: .dat file")
 		self.timepoints = np.linspace(0,False, self.samples)
 		self.phase = np.zeros(self.data[:,0].size)
+		self.fitParameters = np.zeros((self.nScans, self.numberOfParameters[self.function]))
+		self.summedFitParameters = np.zeros((1,self.numberOfParameters[self.function]))
 	def fft(self, omitSamples, sumScans = 0, zeroFill = 0):
 		nextPowerOfTwo = int(math.pow(2,math.ceil(math.log((self.samples-omitSamples))/math.log(2.0))))
+		print(nextPowerOfTwo)
 		self.frequencies = np.linspace(0, self.samplingRate/2, nextPowerOfTwo*(zeroFill +1)/2)#(self.samples-omitSamples)/2)
 		#np.pad(self.frequencies, (0,int(nextPowerOfTwo - (self.samples - omitSamples)/2) + zeroFill * int( (self.samples-omitSamples) /2)), 'constant', constant_values = 0)
 		if sumScans:
@@ -59,6 +65,7 @@ class data:
 				self.sum()
 			tmpData = np.pad(self.summedData[omitSamples:], (0,nextPowerOfTwo - (self.samples - omitSamples) + zeroFill * nextPowerOfTwo), 'constant', constant_values = 0)
 			self.summedFftData =  np.fft.fftshift(np.fft.fft(tmpData))
+			print(self.summedFftData)
 		else:
 			self.fftData = np.empty([0, int(nextPowerOfTwo *
 			    (zeroFill+1))], dtype=float)
@@ -66,8 +73,6 @@ class data:
 			for i in range(0, self.data[:,0].size):
 				tmpData = np.pad(self.data[i,omitSamples:], (0,nextPowerOfTwo - (self.samples - omitSamples) + zeroFill * nextPowerOfTwo), 'constant', constant_values = 0)
 				self.fftData = np.vstack([self.fftData, np.fft.fftshift(np.fft.fft(tmpData))])
-		self.fitParameters = np.zeros((self.fftData.shape[0], 3))
-		self.summedFitParameters = np.zeros((1,3))
 	def getIndex(self, frequency):
 		index = 0
 		while self.frequencies[index] < frequency:
@@ -103,7 +108,50 @@ class data:
 		parameterBounds = ([-np.inf, startFrequency, -np.inf], [np.inf, stopFrequency, np.inf])
 		if summed == 0:
 			return func, curve_fit(func,
-				self.frequencies[startIndex:stopIndex],
-				np.real(cmath.exp(1j*self.phase[scanNumber]) * self.fftData[scanNumber,	-self.frequencies.size+startIndex:-self.frequencies.size+stopIndex]), self.fitParameters[scanNumber], maxfev = 2000, bounds=parameterBounds)
+				self.frequencies[startIndex:stopIndex], np.real(cmath.exp(1j*self.phase[scanNumber]) * self.fftData[scanNumber,	-self.frequencies.size+startIndex:-self.frequencies.size+stopIndex]), self.fitParameters[scanNumber], maxfev = 2000, bounds=parameterBounds)
 		elif summed == 1:
-			return	func, curve_fit(func, self.frequencies[startIndex:stopIndex], np.real(cmath.exp(1j*self.phase[scanNumber]) * self.summedFftData[	-self.frequencies.size+startIndex:-self.frequencies.size+stopIndex]), self.summedFitParameters, maxfev = 2000, bounds=parameterBounds)
+			#pdb.set_trace()
+			return	func, curve_fit(func, self.frequencies[startIndex:stopIndex], np.real(cmath.exp(1j*self.summedPhase) * self.summedFftData[-self.frequencies.size+startIndex:-self.frequencies.size+stopIndex]), self.summedFitParameters, maxfev = 2000, bounds=parameterBounds)
+	def readParameters(self):
+		parameterFilePath = os.path.splitext(self.fullPath)[0] + 'FitParameters.dat'
+		if os.path.exists(parameterFilePath) and os.path.getsize(parameterFilePath)>0:
+			with open(parameterFilePath) as fullFile:
+				lineNumber = 0
+				readList  = list((float(number) for number in fullFile.readline().strip().split()))
+				pdb.set_trace()
+				self.summedFitParameters = readList[0:len(readList) - 1]
+				self.summedPhase = readList[len(readList) - 1]
+				print(self.summedFitParameters)
+				for line in fullFile:
+					readList  = list((float(number) for number in line.strip().split()))
+					self.fitParameters[lineNumber] = readList[0:len(readList) - 1]
+					self.phase[lineNumber] = readList[len(readList) -1]
+					lineNumber += 1 
+				print("Read parameters from file.")
+				print(self.phase)
+
+	def saveParameters(self):
+		noExtensionPath = os.path.splitext(self.fullPath)
+		parameterFile = open(str(noExtensionPath[0]) + 'FitParameters.dat', 'w+')
+		if np.any(self.summedFitParameters):
+			parameterFile.write(str(self.summedFitParameters).lstrip('[').rstrip(']') + '\t')
+			parameterFile.write(str(self.summedPhase))
+			parameterFile.write(str('\n'))
+		else:
+			for column in range(0, self.fitParameters.shape[1]):
+				#parameterFile.write('\t'.join("") + '\n')
+				parameterFile.write("0\t")
+			parameterFile.write(str(self.summedPhase))
+			parameterFile.write(str('\n'))
+		if self.fitParameters.any:
+			for row in range(0,self.fitParameters.shape[0]):
+				for column in range (0,self.fitParameters.shape[1]):
+					parameterFile.write(str(self.fitParameters[row][column]) + "\t")
+				parameterFile.write(str(self.phase[row]))
+				parameterFile.write(str('\n'))
+		else:
+			for row in range(0,self.fitParameters.shape[0]):
+				for column in range (0,self.fitParameters.shape[1]):
+					parameterFile.write(str(self.fitParameters[row][column]) + "\t")
+				parameterFile.write(str(self.phase[row]))
+				parameterFile.write(str('\n'))
